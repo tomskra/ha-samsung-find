@@ -1,49 +1,71 @@
-import logging
+"""Button platform for Samsung Find integration."""
+from __future__ import annotations
 
-from .utils import SAMSUNG_FIND_API_URL_BASE
+import logging
+from typing import Any
+
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_ACCESS_TOKEN, CONF_HEADERS, CONF_USER_ID, DOMAIN
+from .utils import SAMSUNG_FIND_API_URL_BASE
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, 
+    entry: ConfigEntry, 
+    async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up SmartThings Find button entities."""
+    """Set up Samsung Find button entities.
+    
+    Args:
+        hass: Home Assistant instance
+        entry: Config entry
+        async_add_entities: Function to add entities
+    """
     devices = hass.data[DOMAIN][entry.entry_id]["devices"]
     entities = []
+    
     for device in devices:
-        entities += [RingButton(hass, device)]
+        entities.append(RingButton(hass, device))
+        
     async_add_entities(entities)
 
 
 class RingButton(ButtonEntity):
-    """Representation a button entity to make a SmartThings Find device ring."""
+    """Representation of a button entity to make a Samsung Find device ring."""
 
-    def __init__(self, hass: HomeAssistant, device):
-        """Initialize the button."""
-        self._attr_unique_id = f"stf_ring_button_{device['data']['dvceID']}"
-        self._attr_name = f"{device['data']['modelName']} Ring"
-
-        if "icons" in device["data"] and "coloredIcon" in device["data"]["icons"]:
-            self._attr_entity_picture = device["data"]["icons"]["coloredIcon"]
-        self._attr_icon = "mdi:nfc-search-variant"
+    def __init__(self, hass: HomeAssistant, device: dict[str, Any]) -> None:
+        """Initialize the button.
+        
+        Args:
+            hass: Home Assistant instance
+            device: Device data
+        """
+        self.hass = hass
         self.device = device["data"]
+        
+        self._attr_unique_id = f"stf_ring_button_{self.device['dvceID']}"
+        self._attr_name = f"{self.device['modelName']} Ring"
         self._attr_device_info = device["ha_dev_info"]
+        self._attr_icon = "mdi:nfc-search-variant"
 
-    async def async_press(self):
+        if "icons" in self.device and "coloredIcon" in self.device["icons"]:
+            self._attr_entity_picture = self.device["icons"]["coloredIcon"]
+
+    async def async_press(self) -> None:
         """Handle the button press."""
         entry_id = self.registry_entry.config_entry_id
         session = self.hass.data[DOMAIN][entry_id]["session"]
         device_id = self.device["dvceID"]
         user_id = self.hass.data[DOMAIN][entry_id]["user_id"]
         device_type = self.device.get("deviceTypeCode", "")
-        metadata = self.device.get("metadata", "")
+        metadata = self.device.get("metadata", {})
+        
         params = {"type": device_type}
 
         if device_type == "TAG":
@@ -61,14 +83,15 @@ class RingButton(ButtonEntity):
             }
 
         access_token = self.hass.data[DOMAIN][entry_id][CONF_ACCESS_TOKEN]
-        user_id = self.hass.data[DOMAIN][entry_id][CONF_USER_ID]
-        headers = self.hass.data[DOMAIN][entry_id][CONF_HEADERS]
+        headers = self.hass.data[DOMAIN][entry_id][CONF_HEADERS].copy()
+        
         _LOGGER.info("Ringing device %s with payload: %s", device_id, ring_payload)
 
         # Set up headers
-        headers.update(
-            {"Content-Type": "application/json", "x-sec-sa-authtoken": access_token}
-        )
+        headers.update({
+            "Content-Type": "application/json", 
+            "x-sec-sa-authtoken": access_token
+        })
 
         try:
             async with session.post(
@@ -77,17 +100,17 @@ class RingButton(ButtonEntity):
                 headers=headers,
                 params=params,
             ) as response:
-                _LOGGER.debug("HTTP response status: %s", response.status)
+                _LOGGER.debug("HTTP response status: %d", response.status)
                 if response.status == 200:
-                    _LOGGER.info(
-                        "Successfully rang device %s", self.device["modelName"]
-                    )
+                    _LOGGER.info("Successfully rang device %s", self.device["modelName"])
                 else:
                     _LOGGER.error(
-                        "Failed ring operation. Response from find operation API %s:",
+                        "Failed ring operation. Response from find operation API: %s",
                         await response.text(),
                     )
         except Exception as e:
             _LOGGER.error(
-                f"Exception occurred while ringing '{self.device['modelName']}': %s", e
+                "Exception occurred while ringing '%s': %s", 
+                self.device['modelName'], 
+                e
             )

@@ -1,12 +1,18 @@
+"""Utility functions for Samsung Find integration."""
+from __future__ import annotations
+
+import html
 import logging
 import pytz
-import aiohttp
-import html
 from datetime import datetime, timedelta
+from typing import Any
+
+import aiohttp
+
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import (
     DOMAIN,
@@ -28,13 +34,26 @@ OAUTH2_TOKEN_URL_SUFFIX = "/auth/oauth2/v2/token"
 
 
 def _raise_auth_failed() -> None:
+    """Raise ConfigEntryAuthFailed exception."""
     raise ConfigEntryAuthFailed("Failed to authenticate with Samsung Find API")
 
 
 async def renew_tokens(
     hass: HomeAssistant, session: aiohttp.ClientSession, entry_id: str
 ) -> str:
-    """Renew tokens using refresh token."""
+    """Renew tokens using refresh token.
+    
+    Args:
+        hass: Home Assistant instance
+        session: aiohttp client session
+        entry_id: Config entry ID
+        
+    Returns:
+        New access token
+        
+    Raises:
+        ConfigEntryAuthFailed: When token renewal fails
+    """
     try:
         # Get config entry
         entry = hass.config_entries.async_get_entry(entry_id)
@@ -48,8 +67,11 @@ async def renew_tokens(
             CONF_OAUTH2_TOKEN_URL, OAUTH2_REFRESH_TOKEN_URL_FALLBACK
         )
 
+        if not refresh_token or not client_id:
+            raise ConfigEntryAuthFailed("Missing required token data")
+
         _LOGGER.debug(
-            "Access Token requested, using refresh token: %s***",
+            "Requesting access token using refresh token: %s***",
             refresh_token[:4] if refresh_token else "None",
         )
 
@@ -62,12 +84,12 @@ async def renew_tokens(
         async with (
             aiohttp.ClientSession() as auth_session,
             auth_session.post(
-                f"https://{auth_server_url}/{OAUTH2_TOKEN_URL_SUFFIX}", data=data
+                f"https://{auth_server_url}{OAUTH2_TOKEN_URL_SUFFIX}", data=data
             ) as resp,
         ):
             if resp.status != 200:
                 _LOGGER.error(
-                    "Token refresh failed with status %s: %s",
+                    "Token refresh failed with status %d: %s",
                     resp.status,
                     await resp.text(),
                 )
@@ -84,8 +106,8 @@ async def renew_tokens(
             # Update config entry with new tokens
             hass.config_entries.async_update_entry(entry, data=new_data)
 
-            # API returns "access_token_expires_in" value, but it returns 86400 seconds (24 hours), but token is valid for 3600 (1 hour)
-            # It's a good idea to check it in future
+            # API returns "access_token_expires_in" value, but it returns 86400 seconds (24 hours), 
+            # but token is valid for 3600 (1 hour). It's a good idea to check it in future
             access_token_expires_in = 3600
             access_token = tokens["access_token"]
 
@@ -100,6 +122,8 @@ async def renew_tokens(
 
             return access_token
 
+    except ConfigEntryAuthFailed:
+        raise
     except Exception as ex:
         _LOGGER.error("Failed to refresh tokens: %s", ex)
         raise ConfigEntryAuthFailed("Failed to refresh access token") from ex
@@ -109,20 +133,23 @@ async def get_devices(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
     entry_id: str,
-) -> list:
+) -> list[dict[str, Any]]:
     """Get devices from Samsung Find API.
 
     Args:
-        hass (HomeAssistant): Home Assistant instance
-        session (aiohttp.ClientSession): Session with valid OAuth2 token
-        entry_id (str): Config entry ID
+        hass: Home Assistant instance
+        session: Session with valid OAuth2 token
+        entry_id: Config entry ID
 
     Returns:
-        list: List of formatted device dictionaries
+        List of formatted device dictionaries
+        
+    Raises:
+        ConfigEntryAuthFailed: When authentication fails
     """
     try:
         if not await is_token_valid(hass, entry_id):
-            _LOGGER.error("Token expired, refreshing before device request")
+            _LOGGER.debug("Token expired, refreshing before device request")
             await renew_tokens(hass, session, entry_id)
 
         access_token = hass.data[DOMAIN][entry_id][CONF_ACCESS_TOKEN]
@@ -137,7 +164,7 @@ async def get_devices(
         ) as response:
             if response.status != 200:
                 _LOGGER.error(
-                    "Failed to retrieve devices [%s]: %s",
+                    "Failed to retrieve devices [%d]: %s",
                     response.status,
                     await response.text(),
                 )
@@ -145,7 +172,6 @@ async def get_devices(
                     _LOGGER.error(
                         "Authentication failed while fetching devices -> Triggering reauth"
                     )
-
                     _raise_auth_failed()
                 return []
 
@@ -167,7 +193,8 @@ async def get_devices(
                     model_id = vendor.get("modelName", "")
                     device_name = model_id
 
-                    # Tags don't have displayName, display name is saved in label property in device detail. Another API call is needed.
+                    # Tags don't have displayName, display name is saved in label property 
+                    # in device detail. Another API call is needed.
                     device_detail = await get_tag_detail(
                         hass, session, entry_id, device_id
                     )
@@ -188,8 +215,9 @@ async def get_devices(
                 ha_dev = device_registry.async_get(hass).async_get_device({identifier})
 
                 if ha_dev and ha_dev.disabled:
-                    _LOGGER.error(
-                        f"Ignoring disabled device: '{device_name}' (disabled by {ha_dev.disabled_by})"
+                    _LOGGER.debug(
+                        "Ignoring disabled device: '%s' (disabled by %s)",
+                        device_name, ha_dev.disabled_by
                     )
                     continue
 
@@ -220,36 +248,42 @@ async def get_devices(
                 }
 
                 _LOGGER.info("Adding device: %s (%s)", device_name, model_id)
-                _LOGGER.debug("Formated devices: %s", formatted_device)
+                _LOGGER.debug("Formatted device data: %s", formatted_device)
                 devices.append(formatted_device)
 
-            _LOGGER.debug("Returning devices: %s", devices)
+            _LOGGER.debug("Returning %d devices", len(devices))
             return devices
 
     except ConfigEntryAuthFailed:
         raise
     except Exception as e:
-        _LOGGER.exception(f"Error fetching devices: {str(e)}", exc_info=True)
+        _LOGGER.exception("Error fetching devices: %s", str(e))
         return []
 
 
 async def get_tag_detail(
-    hass: HomeAssistant, session: aiohttp.ClientSession, entry_id: str, device_id: str
-) -> list:
+    hass: HomeAssistant, 
+    session: aiohttp.ClientSession, 
+    entry_id: str, 
+    device_id: str
+) -> dict[str, Any] | None:
     """Get device detail from Samsung Find API.
 
     Args:
-        hass (HomeAssistant): Home Assistant instance
-        session (aiohttp.ClientSession): Session with valid OAuth2 token
-        entry_id (str): Config entry ID
-        device_id (str): Device ID
+        hass: Home Assistant instance
+        session: Session with valid OAuth2 token
+        entry_id: Config entry ID
+        device_id: Device ID
 
     Returns:
-        list: List of formatted device dictionaries
+        Device detail dictionary or None if failed
+        
+    Raises:
+        ConfigEntryAuthFailed: When authentication fails
     """
     try:
         if not await is_token_valid(hass, entry_id):
-            _LOGGER.error("Token expired, refreshing before device request")
+            _LOGGER.debug("Token expired, refreshing before device detail request")
             await renew_tokens(hass, session, entry_id)
 
         access_token = hass.data[DOMAIN][entry_id][CONF_ACCESS_TOKEN]
@@ -266,7 +300,7 @@ async def get_tag_detail(
         ) as response:
             if response.status != 200:
                 _LOGGER.error(
-                    "Failed to retrieve device detail [%s]: %s",
+                    "Failed to retrieve device detail [%d]: %s",
                     response.status,
                     await response.text(),
                 )
@@ -287,13 +321,16 @@ async def get_tag_detail(
     except ConfigEntryAuthFailed:
         raise
     except Exception as e:
-        _LOGGER.error(f"Error fetching device detail: {str(e)}", exc_info=True)
+        _LOGGER.error("Error fetching device detail: %s", str(e))
         return None
 
 
 async def get_tag_location(
-    hass: HomeAssistant, session: aiohttp.ClientSession, dev_data: dict, entry_id: str
-) -> dict:
+    hass: HomeAssistant, 
+    session: aiohttp.ClientSession, 
+    dev_data: dict[str, Any], 
+    entry_id: str
+) -> dict[str, Any] | None:
     """Get tag location from Samsung Find API.
 
     Args:
@@ -303,11 +340,14 @@ async def get_tag_location(
         entry_id: Config entry ID
 
     Returns:
-        dict: Location data in the original format
+        Location data in the original format or None if failed
+        
+    Raises:
+        ConfigEntryAuthFailed: When authentication fails
     """
     try:
         if not await is_token_valid(hass, entry_id):
-            _LOGGER.error("Token expired, refreshing before device location request")
+            _LOGGER.debug("Token expired, refreshing before device location request")
             await renew_tokens(hass, session, entry_id)
 
         dev_id = dev_data["dvceID"]
@@ -334,7 +374,7 @@ async def get_tag_location(
         ) as response:
             if response.status != 200:
                 _LOGGER.error(
-                    "[%s]Failed to fetch location [%s]: %s",
+                    "[%s] Failed to fetch location [%d]: %s",
                     dev_name,
                     response.status,
                     await response.text(),
@@ -405,13 +445,16 @@ async def get_tag_location(
     except ConfigEntryAuthFailed:
         raise
     except Exception as e:
-        _LOGGER.error(f"[{dev_name}] Error getting location: {str(e)}", exc_info=True)
+        _LOGGER.error("[%s] Error getting location: %s", dev_name, str(e))
         return None
 
 
 async def get_device_location(
-    hass: HomeAssistant, session: aiohttp.ClientSession, dev_data: dict, entry_id: str
-) -> dict:
+    hass: HomeAssistant, 
+    session: aiohttp.ClientSession, 
+    dev_data: dict[str, Any], 
+    entry_id: str
+) -> dict[str, Any] | None:
     """Get device location from Samsung Find API.
 
     Args:
@@ -421,7 +464,10 @@ async def get_device_location(
         entry_id: Config entry ID
 
     Returns:
-        dict: Location data in the original format
+        Location data in the original format or None if failed
+        
+    Raises:
+        ConfigEntryAuthFailed: When authentication fails
     """
     try:
         if not await is_token_valid(hass, entry_id):
@@ -443,7 +489,7 @@ async def get_device_location(
         ) as response:
             if response.status != 200:
                 _LOGGER.error(
-                    "[%s] Failed to fetch location (%s): %s",
+                    "[%s] Failed to fetch location (%d): %s",
                     dev_name,
                     response.status,
                     await response.text(),
@@ -521,48 +567,53 @@ async def get_device_location(
     except ConfigEntryAuthFailed:
         raise
     except Exception as e:
-        _LOGGER.error(f"[{dev_name}] Error getting location: {str(e)}", exc_info=True)
+        _LOGGER.error("[%s] Error getting location: %s", dev_name, str(e))
         return None
 
 
-def calc_gps_accuracy(hu: float, vu: float) -> float:
+def calc_gps_accuracy(horizontal_uncertainty: float, vertical_uncertainty: float) -> float | None:
     """Calculate the GPS accuracy using the Pythagorean theorem.
+    
     Returns the combined GPS accuracy based on the horizontal
-    and vertical uncertainties provided by the API
+    and vertical uncertainties provided by the API.
 
     Args:
-        hu (float): Horizontal uncertainty.
-        vu (float): Vertical uncertainty.
+        horizontal_uncertainty: Horizontal uncertainty
+        vertical_uncertainty: Vertical uncertainty
 
     Returns:
-        float: Calculated GPS accuracy.
+        Calculated GPS accuracy or None if calculation fails
     """
     try:
-        return round((float(hu) ** 2 + float(vu) ** 2) ** 0.5, 1)
-    except ValueError:
+        return round((float(horizontal_uncertainty) ** 2 + float(vertical_uncertainty) ** 2) ** 0.5, 1)
+    except (ValueError, TypeError):
         return None
 
 
-def get_sub_location(ops: list, subDeviceName: str) -> tuple:
-    """Extracts sub-location data for devices that contain multiple sub-locations (e.g., left and right earbuds).
+def get_sub_location(ops: list[dict[str, Any]], sub_device_name: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Extract sub-location data for devices with multiple sub-locations.
+    
+    For devices that contain multiple sub-locations (e.g., left and right earbuds).
 
     Args:
-        ops (list): List of operations from the API.
-        subDeviceName (str): Name of the sub-device.
+        ops: List of operations from the API
+        sub_device_name: Name of the sub-device
 
     Returns:
-        tuple: The operation and sub-location data.
+        Tuple of the operation and sub-location data
     """
-    if not ops or not subDeviceName or len(ops) < 1:
+    if not ops or not sub_device_name or len(ops) < 1:
         return {}, {}
+        
     for op in ops:
-        if subDeviceName in op.get("encLocation", {}):
-            loc = op["encLocation"][subDeviceName]
+        if sub_device_name in op.get("encLocation", {}):
+            loc = op["encLocation"][sub_device_name]
             sub_loc = {
                 "latitude": float(loc["latitude"]),
                 "longitude": float(loc["longitude"]),
                 "gps_accuracy": calc_gps_accuracy(
-                    loc.get("horizontalUncertainty"), loc.get("verticalUncertainty")
+                    loc.get("horizontalUncertainty", 0), 
+                    loc.get("verticalUncertainty", 0)
                 ),
                 "gps_date": parse_stf_date(loc["gpsUtcDt"]),
             }
@@ -570,34 +621,34 @@ def get_sub_location(ops: list, subDeviceName: str) -> tuple:
     return {}, {}
 
 
-def parse_stf_date(datestr: str) -> datetime:
-    """Parses a date string in the format "%Y%m%d%H%M%S" to a datetime object.
+def parse_stf_date(date_str: str) -> datetime:
+    """Parse a date string in the format "%Y%m%d%H%M%S" to a datetime object.
 
     Args:
-        datestr (str): The date string in the format "%Y%m%d%H%M%S".
+        date_str: The date string in the format "%Y%m%d%H%M%S"
 
     Returns:
-        datetime: A datetime object representing the input date string.
+        A datetime object representing the input date string
     """
-    return datetime.strptime(datestr, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+    return datetime.strptime(date_str, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
 
 
-def get_battery_level(dev_name: str, batt_raw: str) -> int | None:
+def get_battery_level(dev_name: str, batt_raw: str | int | float | None) -> int | None:
     """Try to extract the device battery level from the received operation.
 
     Args:
-        dev_name (str): The name of the device.
-        batt_raw (str): Raw battery level.
+        dev_name: The name of the device
+        batt_raw: Raw battery level
 
     Returns:
-        int | None: The battery level (0-100) if found, None otherwise.
+        The battery level (0-100) if found, None otherwise
     """
     # Handle None case
     if batt_raw is None:
         return None
 
     # Try predefined levels first
-    if isinstance(batt_raw, (str)):
+    if isinstance(batt_raw, str):
         if batt := BATTERY_LEVELS.get(batt_raw):
             return batt
 
@@ -605,7 +656,6 @@ def get_battery_level(dev_name: str, batt_raw: str) -> int | None:
     try:
         if isinstance(batt_raw, (str, int, float)):
             return int(float(batt_raw))
-
         return None
     except (ValueError, TypeError):
         _LOGGER.warning("[%s]: Invalid battery level received: %r", dev_name, batt_raw)
@@ -613,14 +663,22 @@ def get_battery_level(dev_name: str, batt_raw: str) -> int | None:
 
 
 async def is_token_valid(hass: HomeAssistant, entry_id: str) -> bool:
-    """Check if current token is still valid."""
+    """Check if current token is still valid.
+    
+    Args:
+        hass: Home Assistant instance
+        entry_id: Config entry ID
+        
+    Returns:
+        True if token is valid, False otherwise
+    """
     access_token = hass.data[DOMAIN][entry_id].get(CONF_ACCESS_TOKEN)
     last_refresh = hass.data[DOMAIN][entry_id].get(CONF_LAST_TOKEN_REFRESH)
     expires_in = hass.data[DOMAIN][entry_id].get(CONF_TOKEN_EXPIRES_IN, 3600)
 
     _LOGGER.debug(
-        "Checking token validity: %s****, last refresh:%s",
-        access_token[:4],
+        "Checking token validity: %s****, last refresh: %s",
+        access_token[:4] if access_token else "None",
         last_refresh,
     )
 
@@ -631,8 +689,8 @@ async def is_token_valid(hass: HomeAssistant, entry_id: str) -> bool:
     expiration_time = last_refresh_time + timedelta(seconds=expires_in)
 
     _LOGGER.debug(
-        "Access token %s****, expires in:%s",
-        access_token[:4],
+        "Access token %s****, expires at: %s",
+        access_token[:4] if access_token else "None",
         expiration_time,
     )
 

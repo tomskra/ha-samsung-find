@@ -2,6 +2,7 @@
 
 Handles OAuth2 authentication and options flow for Samsung Find.
 """
+from __future__ import annotations
 
 import base64
 import hashlib
@@ -45,8 +46,15 @@ class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     REDIRECT_URI = "https://smartthingsfind.samsung.com/login.do"
     CLIENT_ID = "27zmg0v1oo"  # Client ID for Samsung Find
 
-    async def async_step_user(self, user_input=None):
-        """Start OAuth2 flow: generate code_verifier, code_challenge, show auth URL and input for code."""
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Start OAuth2 flow: generate code_verifier, code_challenge, show auth URL and input for code.
+        
+        Args:
+            user_input: User input data
+            
+        Returns:
+            Config flow result
+        """
         errors = {}
 
         # Generate code_verifier and auth_url only if not already stored
@@ -64,8 +72,8 @@ class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.code_verifier = code_verifier
             self.code_challenge = code_challenge
 
-            _LOGGER.debug("OAuthFlow: code_verifier: %s", code_verifier)
-            _LOGGER.debug("OAuthFlow: code_challenge: %s", code_challenge)
+            _LOGGER.debug("OAuth Flow: code_verifier: %s", code_verifier)
+            _LOGGER.debug("OAuth Flow: code_challenge: %s", code_challenge)
 
             # Build authorization URL
             state = secrets.token_urlsafe(16)
@@ -78,7 +86,7 @@ class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 f"&scope=offline.access"
                 f"&state={state}"
             )
-            _LOGGER.debug("OAuthFlow: Generated new code_verifier and auth_url")
+            _LOGGER.debug("OAuth Flow: Generated new code_verifier and auth_url")
 
         if user_input is not None:
             code = user_input.get("code")
@@ -99,7 +107,7 @@ class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
 
                     _LOGGER.debug(
-                        "OAuthFlow: Exchanging code for tokens with data: %s", data
+                        "OAuth Flow: Exchanging code for tokens with data: %s", data
                     )
 
                     session.headers.update(
@@ -112,17 +120,15 @@ class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ) as resp:
                         if resp.status != 200:
                             _LOGGER.error(
-                                "Token exchange failed with status %s", resp.status
+                                "Token exchange failed with status %d", resp.status
                             )
                             errors["base"] = "token_error"
                         else:
                             tokens = await resp.json()
                             access_token = tokens.get("access_token")
                             refresh_token = tokens.get("refresh_token")
-
-                            _LOGGER.error("refresh token: %s", refresh_token)
-
                             user_id = tokens.get("userId")
+                            
                             if not access_token or not refresh_token:
                                 errors["base"] = "token_error"
                             else:
@@ -146,64 +152,34 @@ class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"auth_url": self.auth_url},
         )
 
-    async def async_step_code(self, user_input=None):
-        """Receive authorization code, exchange for refresh and access tokens."""
-        errors = {}
-        _LOGGER.error("ASYNC STEP CODE")
-        if user_input is not None:
-            code = user_input.get("code")
-            if not code:
-                errors["base"] = "missing_code"
-            else:
-                # Exchange code for tokens
-                async with aiohttp.ClientSession() as session:
-                    data = {
-                        "grant_type": "authorization_code",
-                        "code": code,
-                        "redirect_uri": self.REDIRECT_URI,
-                        "client_id": self.CLIENT_ID,
-                        "code_verifier": self.code_verifier,
-                    }
-                    async with session.post(self.OAUTH2_TOKEN_URL, data=data) as resp:
-                        if resp.status != 200:
-                            errors["base"] = "token_error"
-                        else:
-                            tokens = await resp.json()
-                            access_token = tokens.get("access_token")
-                            refresh_token = tokens.get("refresh_token")
-                            user_id = tokens.get("userId")
-                            if not access_token or not refresh_token:
-                                errors["base"] = "token_error"
-                            else:
-                                # Save tokens
-                                data = {
-                                    CONF_ACCESS_TOKEN: access_token,
-                                    CONF_CLIENT_ID: self.CLIENT_ID,
-                                    CONF_REFRESH_TOKEN: refresh_token,
-                                    CONF_USER_ID: user_id,
-                                }
-                                return self.async_create_entry(
-                                    title="Samsung Find", data=data
-                                )
-
-        return self.async_show_form(
-            step_id="code",
-            errors=errors,
-            data_schema=vol.Schema({vol.Required("code"): str}),
-        )
-
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     reauth_entry: ConfigEntry | None = None
 
-    async def async_step_reauth(self, user_input=None):
+    async def async_step_reauth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Handle reauth flow.
+        
+        Args:
+            user_input: User input data
+            
+        Returns:
+            Config flow result
+        """
         self.reauth_entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
         )
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input=None):
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Handle reauth confirmation.
+        
+        Args:
+            user_input: User input data
+            
+        Returns:
+            Config flow result
+        """
         if user_input is None:
             return self.async_show_form(
                 step_id="user",
@@ -211,8 +187,16 @@ class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         return await self.async_step_user()
 
-    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
-        return await self.async_step_reauth_confirm(self)
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Handle reconfigure flow.
+        
+        Args:
+            user_input: User input data
+            
+        Returns:
+            Config flow result
+        """
+        return await self.async_step_reauth_confirm()
 
     @staticmethod
     @callback
