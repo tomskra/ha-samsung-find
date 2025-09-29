@@ -1,0 +1,12 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "1. Otevřete <a href='{auth_url}' target='_blank'>tento odkaz</a>.<br>2. Přihlaste se Samsung účtem a zkopírujte autorizační kód.<br>Pokračujte tlačítkem níže."
+      },
+      "code": {
+        "description": "1. Otevřete <a href='{auth_url}' target='_blank'>tento odkaz</a>.<br>2. Přihlaste se Samsung účtem a zkopírujte autorizační kód.<br>Zadejte jej níže."
+      }
+    }
+  }
+}
