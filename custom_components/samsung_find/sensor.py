@@ -64,5 +64,7 @@ class DeviceBatterySensor(SensorEntity):
 
     @property
     def state(self):
-        ops = self.coordinator.data.get(self.device_id, {}).get("ops", [])
-        return get_battery_level(self.name, ops)
+        return get_battery_level(
+            self.name,
+            self.coordinator.data.get(self.device_id, {}).get("battery", None),
+        )

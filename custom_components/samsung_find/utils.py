@@ -48,7 +48,7 @@ async def renew_tokens(
             CONF_OAUTH2_TOKEN_URL, OAUTH2_REFRESH_TOKEN_URL_FALLBACK
         )
 
-        _LOGGER.warning(
+        _LOGGER.debug(
             "Access Token requested, using refresh token: %s***",
             refresh_token[:4] if refresh_token else "None",
         )
@@ -84,16 +84,21 @@ async def renew_tokens(
             # Update config entry with new tokens
             hass.config_entries.async_update_entry(entry, data=new_data)
 
+            # API returns "access_token_expires_in" value, but it returns 86400 seconds (24 hours), but token is valid for 3600 (1 hour)
+            # It's a good idea to check it in future
+            access_token_expires_in = 3600
+            access_token = tokens["access_token"]
+
             # Store runtime data in hass.data
             hass.data[DOMAIN][entry_id].update(
                 {
-                    CONF_ACCESS_TOKEN: tokens["access_token"],
+                    CONF_ACCESS_TOKEN: access_token,
                     CONF_LAST_TOKEN_REFRESH: datetime.now().isoformat(),
-                    CONF_TOKEN_EXPIRES_IN: tokens.get("expires_in", 86400),
+                    CONF_TOKEN_EXPIRES_IN: access_token_expires_in,
                 }
             )
 
-            return tokens["access_token"]
+            return access_token
 
     except Exception as ex:
         _LOGGER.error("Failed to refresh tokens: %s", ex)
@@ -350,6 +355,7 @@ async def get_tag_location(
                 "used_loc": None,
                 "nearby_loc": None,
                 "ops": [],
+                "battery": None,
             }
 
             # Extract location from first item's geolocations
@@ -361,7 +367,8 @@ async def get_tag_location(
                 return res
 
             # Get most recent location
-            location = item["geolocations"][0]
+            locations = item["geolocations"]
+            location = locations[0]
 
             # Convert to original format
             used_loc = {
@@ -370,16 +377,25 @@ async def get_tag_location(
                 "gps_accuracy": float(location["accuracy"]),
                 "gps_date": datetime.fromtimestamp(
                     location["lastUpdateTime"] / 1000, pytz.UTC
-                )
+                ),
+            }
+
+            # Create operation in original format for getting battery level
+            operation = {
+                "oprnType": "LOCATION",
+                "battery": location["battery"],
+                "extra": {"gpsUtcDt": used_loc["gps_date"].strftime("%Y%m%d%H%M%S")},
             }
 
             res.update(
                 {
                     "location_found": True,
                     "used_loc": used_loc,
-                    "geolocation": location,
-                    "geolocations": item["geolocations"],
+                    "geolocations": locations,
+                    "used_op": operation,
+                    "ops": [operation],
                     "nearby_loc": location.get("nearby", "false"),
+                    "battery": location["battery"],
                 }
             )
 
@@ -447,6 +463,7 @@ async def get_device_location(
                 "used_op": None,
                 "used_loc": None,
                 "ops": [],
+                "battery": None,
             }
 
             # Check if we have item and operations
@@ -454,8 +471,9 @@ async def get_device_location(
                 return res
 
             # Find operation with type LOCATION
+            operations = data["item"]["operation"]
             location_op = None
-            for op in data["item"]["operation"]:
+            for op in operations:
                 if op.get("oprnType") == "LOCATION":
                     location_op = op
                     break
@@ -463,7 +481,13 @@ async def get_device_location(
             if not location_op:
                 return res
 
-            # Convert to original format
+            # Find operation with type CHECK_CONNECTION and parse Battery level
+            operation_cc = None
+            for op in operations:
+                if op.get("oprnType") == "CHECK_CONNECTION":
+                    operation_cc = op
+                    break
+
             used_loc = {
                 "latitude": float(location_op["latitude"]),
                 "longitude": float(location_op["longitude"]),
@@ -481,25 +505,13 @@ async def get_device_location(
                 ),
             }
 
-            # Create operation in original format
-            operation = {
-                "oprnType": "LOCATION",
-                "battery": None,  # Battery info might be in CHECK_CONNECTION operation
-                "extra": {"gpsUtcDt": used_loc["gps_date"].strftime("%Y%m%d%H%M%S")},
-            }
-
-            # Try to get battery info from CHECK_CONNECTION operation
-            for op in data["item"]["operation"]:
-                if op.get("oprnType") == "CHECK_CONNECTION" and "battery" in op:
-                    operation["battery"] = op["battery"]
-                    break
-
             res.update(
                 {
                     "location_found": True,
                     "used_loc": used_loc,
-                    "used_op": operation,
-                    "ops": [operation],
+                    "used_op": location_op,
+                    "ops": operations,
+                    "battery": operation_cc.get("battery") if operation_cc else None,
                 }
             )
 
@@ -570,49 +582,41 @@ def parse_stf_date(datestr: str) -> datetime:
     return datetime.strptime(datestr, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
 
 
-def get_battery_level(dev_name: str, ops: list) -> int | None:
+def get_battery_level(dev_name: str, batt_raw: str) -> int | None:
     """Try to extract the device battery level from the received operation.
 
     Args:
         dev_name (str): The name of the device.
-        ops (list): List of operations from the API.
+        batt_raw (str): Raw battery level.
 
     Returns:
         int | None: The battery level (0-100) if found, None otherwise.
     """
-    if not ops:
+    # Handle None case
+    if batt_raw is None:
         return None
 
-    for op in ops:
-        if op["oprnType"] == "LOCATION" and "battery" in op:
-            batt_raw = op["battery"]
+    # Try predefined levels first
+    if isinstance(batt_raw, (str)):
+        if batt := BATTERY_LEVELS.get(batt_raw):
+            return batt
 
-            # Handle None case
-            if batt_raw is None:
-                return None
+    # Try converting to integer if it's a string or number
+    try:
+        if isinstance(batt_raw, (str, int, float)):
+            return int(float(batt_raw))
 
-            # Try predefined levels first
-            if batt := BATTERY_LEVELS.get(batt_raw):
-                return batt
-
-            # Try converting to integer if it's a string or number
-            try:
-                if isinstance(batt_raw, (str, int, float)):
-                    return int(float(batt_raw))
-                return None
-            except (ValueError, TypeError):
-                _LOGGER.warning(
-                    "[%s]: Invalid battery level received: %r", dev_name, batt_raw
-                )
-                return None
-    return None
+        return None
+    except (ValueError, TypeError):
+        _LOGGER.warning("[%s]: Invalid battery level received: %r", dev_name, batt_raw)
+        return None
 
 
 async def is_token_valid(hass: HomeAssistant, entry_id: str) -> bool:
     """Check if current token is still valid."""
     access_token = hass.data[DOMAIN][entry_id].get(CONF_ACCESS_TOKEN)
-    last_refresh = hass.data[DOMAIN][entry_id].get("last_token_refresh")
-    expires_in = hass.data[DOMAIN][entry_id].get("token_expires_in", 86400)
+    last_refresh = hass.data[DOMAIN][entry_id].get(CONF_LAST_TOKEN_REFRESH)
+    expires_in = hass.data[DOMAIN][entry_id].get(CONF_TOKEN_EXPIRES_IN, 3600)
 
     _LOGGER.debug(
         "Checking token validity: %s****, last refresh:%s",
@@ -627,7 +631,7 @@ async def is_token_valid(hass: HomeAssistant, entry_id: str) -> bool:
     expiration_time = last_refresh_time + timedelta(seconds=expires_in)
 
     _LOGGER.debug(
-        "Access token %s****, expires in::%s",
+        "Access token %s****, expires in:%s",
         access_token[:4],
         expiration_time,
     )
