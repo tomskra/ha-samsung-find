@@ -116,6 +116,11 @@ Contributions are welcome! Feel free to open issues or submit pull requests to h
 
 For support, please create an issue on the GitHub repository.
 
+## Known issues
+
+- Integration logo is missing (pending completion of the home-assistant/brands PR).
+- Devices currently lack individual logos.
+
 ## Roadmap
 
 - No current roadmap
