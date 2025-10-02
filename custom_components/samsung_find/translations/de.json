@@ -1,18 +1,19 @@
 {
   "config": {
     "abort": {
-      "reauth_successful": "Erfolgreich authentifiziert."
+      "reauth_successful": "Erneute Authentifizierung erfolgreich."
     },
-    "progress": {
-      "task_stage_one": "Vorbereitung läuft, bitte warten...",
-      "task_stage_two": "Bitte scanne den QR Code mit deinem Galaxy-Gerät, um dich anzumelden. Alternativ kannst du dich direkt im Browser anmelden, indum du [hier]({url}) klickst. \n\n![QR Code](data:image/png;base64,{qr_code})\n\nCode kann nicht gescannt werden? Gehe auf [signin.samsung.com/key](https://signin.samsung.com/key/) und gib den folgenden Code ein:\n\n## ```{code}```\n"
+    "step": {
+      "user": {
+        "description": "1. Öffnen Sie [diesen Link]({auth_url}) und öffnen Sie sofort die Entwicklerkonsole im Browser (F12).\n2. Melden Sie sich mit Ihrem Samsung-Konto an. Nach der Anmeldung sehen Sie die SmartThings-Seite (melden Sie sich dort nicht an, fahren Sie unten fort)\n 3. Finden Sie die **login.do**-Anfrage im Netzwerk-Tab\n 4. Kopieren Sie **auth_server_url** und **code** aus den URL-Abfrageparametern.\nFahren Sie mit der Schaltfläche unten fort."
+      }
     }
   },
   "options": {
     "step": {
       "init": {
         "data": {
-          "update_interval": "Aktualisierungsintervall (in Sekunden)"
+          "update_interval": "Aktualisierungsintervall (Sekunden)"
         }
       }
     }

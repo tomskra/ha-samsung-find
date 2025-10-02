@@ -72,7 +72,7 @@ If ringing your tag doesn't work, first try making it ring from the [Samsung Fin
 
 ![screenshot](media/preserve_logs.png)
 
-6. Log in to your Samsung account. After successful login, you will be redirected to the SmartThings login page (don't do anything yet, just follow the next instructions)
+6. Log in to your Samsung account. After successful login, you will be redirected to the SmartThings login page (**don't do anything yet, just follow the next instructions** - it's crucial you don't login on this second page)
 7. Follow the instructions below and copy the "code" and "auth_server_url" values:
 
 ![screenshot](media/code_and_auth_url.png)

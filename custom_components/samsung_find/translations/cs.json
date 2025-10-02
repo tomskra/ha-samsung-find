@@ -1,11 +1,20 @@
 {
   "config": {
+    "abort": {
+      "reauth_successful": "Opětovné ověření proběhlo úspěšně."
+    },
     "step": {
       "user": {
-        "description": "1. Otevřete <a href='{auth_url}' target='_blank'>tento odkaz</a>.<br>2. Přihlaste se Samsung účtem a zkopírujte autorizační kód.<br>Pokračujte tlačítkem níže."
-      },
-      "code": {
-        "description": "1. Otevřete <a href='{auth_url}' target='_blank'>tento odkaz</a>.<br>2. Přihlaste se Samsung účtem a zkopírujte autorizační kód.<br>Zadejte jej níže."
+        "description": "1. Otevřete [tento odkaz]({auth_url}) a okamžitě otevřete konzoli pro vývojáře v prohlížeči (F12).\n2. Přihlaste se svým Samsung účtem. Po přihlášení uvidíte SmartThings stránku (nepřihlašujte se tam, pokračujte níže)\n 3. Najděte požadavek **login.do** na kartě Síť\n 4. Zkopírujte **auth_server_url** a **code** z parametrů URL dotazu.\nPokračujte tlačítkem níže."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "update_interval": "Interval aktualizace (sekundy)"
+        }
       }
     }
   }

@@ -5,10 +5,7 @@
     },
     "step": {
       "user": {
-        "description": "1. Open [this link]({auth_url}) and immediatelly open Developer Console in browser (F12).\n2. Log in with your Samsung account (if needed)\n 3. Find the **login.do** request in Network tab\n 4. Copy the **auth_server_url** and **code** from URL query parameter.\nContinue with the button below."
-      },
-      "code": {
-        "description": "Enter the authorization code you received after logging in with your Samsung account.\n Code is included in URL query parameter."
+        "description": "1. Open [this link]({auth_url}) and immediately open Developer Console in browser (F12).\n2. Log in with your Samsung account. After login, you'll see SmartThings page (don't login there, continue below)\n 3. Find the **login.do** request in Network tab\n 4. Copy the **auth_server_url** and **code** from URL query parameter.\nContinue with the button below."
       }
     }
   },
