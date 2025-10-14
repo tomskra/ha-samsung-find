@@ -4,10 +4,9 @@ Handles OAuth2 authentication and options flow for Samsung Find.
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import logging
 import secrets
+from urllib.parse import urlparse, parse_qs
 from typing import Any
 
 import aiohttp
@@ -30,130 +29,111 @@ from .const import (
     CONF_USER_ID,
     DOMAIN,
     CONF_OAUTH2_TOKEN_URL,
+    CONF_USERAUTH_TOKEN,
 )
+from .auth_service import SamsungAuthService
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class SamsungFindConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow handler for the Samsung Find integration.
+    """Config flow using advanced encrypted Samsung Android SDK auth flow."""
 
-    Manages the OAuth2 authentication process and configuration steps.
-    """
+    VERSION = 2
+    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
-    OAUTH2_AUTH_URL = "https://account.samsung.com/accounts/v1/FMM2/signInGate"
-    OAUTH2_TOKEN_URL_SUFFIX = "/auth/oauth2/v2/token"
-    REDIRECT_URI = "https://smartthingsfind.samsung.com/login.do"
-    CLIENT_ID = "27zmg0v1oo"  # Client ID for Samsung Find
+    def __init__(self) -> None:
+        self._auth = SamsungAuthService()
+        self._auth_url: str | None = None
+        self._country_code: str = "us"  # fallback; HA country not accessible here yet
+        self._step: str | None = None
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Start OAuth2 flow: generate code_verifier, code_challenge, show auth URL and input for code.
-        
-        Args:
-            user_input: User input data
-            
-        Returns:
-            Config flow result
-        """
-        errors = {}
+        """First step: prepare auth URL or process redirect URL."""
+        errors: dict[str, str] = {}
 
-        # Generate code_verifier and auth_url only if not already stored
-        if not hasattr(self, "code_verifier") or not hasattr(self, "auth_url"):
-            # Generate PKCE code_verifier and code_challenge
-            code_verifier = secrets.token_urlsafe(64)
-            code_challenge = (
-                base64.urlsafe_b64encode(
-                    hashlib.sha256(code_verifier.encode()).digest()
-                )
-                .rstrip(b"=")
-                .decode("utf-8")
+        # Initial call -> build URL
+        if user_input is None:
+            try:
+                await self._auth.get_entry_point()
+                self._auth.generate_device_info()
+                self._auth_url = self._auth.build_auth_url(self._country_code)
+                self._step = "await_redirect"
+            except Exception as exc:  # pragma: no cover
+                _LOGGER.exception("Failed to build auth URL")
+                errors["base"] = "auth_url_error"
+            return self.async_show_form(
+                step_id="user",
+                errors=errors,
+                data_schema=vol.Schema({vol.Required("redirect_url"): str}),
+                description_placeholders={"auth_url": self._auth_url or ""},
             )
 
-            self.code_verifier = code_verifier
-            self.code_challenge = code_challenge
-
-            _LOGGER.debug("OAuth Flow: code_verifier: %s", code_verifier)
-            _LOGGER.debug("OAuth Flow: code_challenge: %s", code_challenge)
-
-            # Build authorization URL
-            state = secrets.token_urlsafe(16)
-            self.auth_url = (
-                f"{self.OAUTH2_AUTH_URL}?response_type=code"
-                f"&client_id={self.CLIENT_ID}"
-                f"&redirect_uri={self.REDIRECT_URI}"
-                f"&code_challenge={code_challenge}"
-                f"&code_challenge_method=S256"
-                f"&scope=offline.access"
-                f"&state={state}"
+        # We have user input -> expect redirect_url from browser
+        redirect_url = user_input.get("redirect_url")
+        if not redirect_url:
+            errors["base"] = "missing_redirect"
+            return self.async_show_form(
+                step_id="user",
+                errors=errors,
+                data_schema=vol.Schema({vol.Required("redirect_url"): str}),
+                description_placeholders={"auth_url": self._auth_url or ""},
             )
-            _LOGGER.debug("OAuth Flow: Generated new code_verifier and auth_url")
 
-        if user_input is not None:
-            code = user_input.get("code")
-            if not code:
-                errors["base"] = "missing_code"
-            auth_server_url = user_input.get("auth_server_url")
-            if not auth_server_url:
-                errors["base"] = "missing_auth_server_url"
-            else:
-                # Exchange code for tokens
-                async with aiohttp.ClientSession() as session:
-                    data = {
-                        "grant_type": "authorization_code",
-                        "code": code,
-                        "redirect_uri": self.REDIRECT_URI,
-                        "client_id": self.CLIENT_ID,
-                        "code_verifier": self.code_verifier,
-                    }
+        try:
+            parsed = urlparse(redirect_url)
+            params_qs = parse_qs(parsed.query)
+            # Flatten expected params
+            flat: dict[str, str] = {}
+            for key in ["state", "code", "auth_server_url", "retValue"]:
+                if key in params_qs:
+                    flat[key] = params_qs[key][0]
+            decrypted = self._auth.decrypt_login_redirect(flat)
+            if not decrypted.code or not decrypted.auth_server_url:
+                errors["base"] = "decrypt_failed"
+                raise ValueError("Missing decrypted code or auth_server_url")
 
-                    _LOGGER.debug(
-                        "OAuth Flow: Exchanging code for tokens with data: %s", data
-                    )
+            user_email = decrypted.user_email or secrets.token_hex(4) + "@example.com"
+            auth_res = await self._auth.get_user_auth_token(decrypted.code, user_email)
+            userauth_token = auth_res.get("userauth_token")
+            if not userauth_token:
+                raise ValueError("userauth_token missing")
+            # Request Samsung Find API offline.access token
+            find_tokens = await self._auth.get_api_token(
+                self._auth.FIND_CLIENT_ID, "offline.access", user_email
+            )
+            access_token = find_tokens.get("access_token")
+            refresh_token = find_tokens.get("refresh_token")
+            user_id = find_tokens.get("userId")
+            if not access_token or not refresh_token:
+                errors["base"] = "token_error"
+                raise ValueError("Missing required tokens")
 
-                    session.headers.update(
-                        {"Content-Type": "application/x-www-form-urlencoded"}
-                    )
+            # auth_server_url may include https:// prefix; utils expect host only
+            auth_server_url = decrypted.auth_server_url or ""
+            auth_server_url = auth_server_url.replace("https://", "").rstrip("/")
 
-                    async with session.post(
-                        f"https://{auth_server_url}{self.OAUTH2_TOKEN_URL_SUFFIX}",
-                        data=data,
-                    ) as resp:
-                        if resp.status != 200:
-                            _LOGGER.error(
-                                "Token exchange failed with status %d", resp.status
-                            )
-                            errors["base"] = "token_error"
-                        else:
-                            tokens = await resp.json()
-                            access_token = tokens.get("access_token")
-                            refresh_token = tokens.get("refresh_token")
-                            user_id = tokens.get("userId")
-                            
-                            if not access_token or not refresh_token:
-                                errors["base"] = "token_error"
-                            else:
-                                # Save tokens
-                                return self.async_create_entry(
-                                    title="Samsung Find",
-                                    data={
-                                        CONF_ACCESS_TOKEN: access_token,
-                                        CONF_CLIENT_ID: self.CLIENT_ID,
-                                        CONF_REFRESH_TOKEN: refresh_token,
-                                        CONF_USER_ID: user_id,
-                                        CONF_OAUTH2_TOKEN_URL: auth_server_url,
-                                    },
-                                )
-        return self.async_show_form(
-            step_id="user",
-            errors=errors,
-            data_schema=vol.Schema(
-                {vol.Required("code"): str, vol.Required("auth_server_url"): str}
-            ),
-            description_placeholders={"auth_url": self.auth_url},
-        )
-
-    VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
+            return self.async_create_entry(
+                title="Samsung Find",
+                data={
+                    CONF_ACCESS_TOKEN: access_token,
+                    CONF_CLIENT_ID: self._auth.FIND_CLIENT_ID,
+                    CONF_REFRESH_TOKEN: refresh_token,
+                    CONF_USER_ID: user_id,
+                    CONF_OAUTH2_TOKEN_URL: auth_server_url,
+                    CONF_USERAUTH_TOKEN: userauth_token,
+                },
+            )
+        except Exception as exc:  # pragma: no cover
+            if not errors:
+                errors["base"] = "unknown"
+            _LOGGER.exception("Authentication process failed: %s", exc)
+            return self.async_show_form(
+                step_id="user",
+                errors=errors,
+                data_schema=vol.Schema({vol.Required("redirect_url"): str}),
+                description_placeholders={"auth_url": self._auth_url or ""},
+            )
 
     reauth_entry: ConfigEntry | None = None
 

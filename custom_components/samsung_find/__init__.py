@@ -24,6 +24,7 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     CONF_UPDATE_INTERVAL_DEFAULT,
     CONF_USER_ID,
+    CONF_USERAUTH_TOKEN,
     DOMAIN,
 )
 from .utils import get_device_location, get_devices, get_tag_location, renew_tokens
@@ -118,6 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client_id = entry.data.get(CONF_CLIENT_ID)
     refresh_token = entry.data.get(CONF_REFRESH_TOKEN)
     user_id = entry.data.get(CONF_USER_ID)
+    userauth_token = entry.data.get(CONF_USERAUTH_TOKEN)
 
     # Get country from HA config, fallback to US
     country_code = hass.config.country or "US"
@@ -143,6 +145,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             CONF_HEADERS: headers,
             CONF_USER_ID: user_id,
             CONF_COUNTRY_CODE: country_code_3,
+            CONF_USERAUTH_TOKEN: userauth_token,
         }
     )
 

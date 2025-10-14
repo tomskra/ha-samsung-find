@@ -8,7 +8,9 @@
   "integration_type": "hub",
   "dependencies": [],
   "codeowners": ["@tomskra"],
-  "requirements": [],
+  "requirements": [
+    "pycryptodome>=3.20.0"
+  ],
   "iot_class": "cloud_polling",
   "config_flow": true
 }
