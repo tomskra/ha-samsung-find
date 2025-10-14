@@ -66,19 +66,11 @@ If ringing your tag doesn't work, first try making it ring from the [Samsung Fin
 
 1. Go to the Integrations page
 2. Search for "Samsung Find"
-3. Click on "this link" and your browser will open
-4. The Samsung login dialog will appear
-5. Open Developer Tools (F12) in your browser, click on the Network tab, and click on "Preserve logs"
-
-![screenshot](media/preserve_logs.png)
-
-6. Log in to your Samsung account. After successful login, you will be redirected to the SmartThings login page (**don't do anything yet, just follow the next instructions** - it's crucial you don't login on this second page)
-7. Follow the instructions below and copy the "code" and "auth_server_url" values:
-
-![screenshot](media/code_and_auth_url.png)
-
-8. Enter the values into Home Assistant
-9. Wait a few seconds for the integration to be ready
+3. An authentication URL will be displayed in the form. Click the link (or copy it into your browser). This URL contains an encrypted payload required for Samsung's Android SDK login method.
+4. Log into your Samsung account as usual. After successful login you'll be redirected to a URL starting with `ms-app://...` – your browser will likely show an error because this scheme isn't handled. That's expected.
+5. Copy the FULL redirect URL (everything beginning with `ms-app://` including all query parameters).
+6. Paste this redirect URL into the Home Assistant form field and submit. The integration will decrypt the response locally, obtain the necessary user and API tokens, and finish setup.
+7. Wait a few seconds for the integration to load your devices.
 
 ## Support
 It’s been a fun challenge, but also a lot of hard work. If this integration has made your smart home a little more useful or convenient, and you’d like to show some support, a coffee is always appreciated. It helps keep the project going and makes the time spent on updates and improvements even more rewarding. ☕
@@ -101,7 +93,7 @@ logger:
 ## Credits
 
 Some logic used here is based on the [SmartThings Home Assistant integration](https://github.com/Vedeneb/HA-SmartThings-Find).
-Special thanks also to the work documented in the [uTag Wiki](https://github.com/KieronQuinn/uTag), which provided valuable insights.  
+Special thanks also to the work documented in the [uTag Wiki](https://github.com/KieronQuinn/uTag), which provided valuable insights into the encrypted Android SDK authentication flow.  
 
 
 ## License
