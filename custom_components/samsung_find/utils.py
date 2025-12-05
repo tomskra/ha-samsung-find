@@ -200,6 +200,7 @@ async def get_devices(
                     )
                     if device_detail:
                         device_name = device_detail.get("label", device_name)
+                        icon = device_detail.get("icons", "").get("coloredIcon", "")
 
                 else:
                     model_info = item.get("modelInfo", {})
@@ -245,6 +246,7 @@ async def get_devices(
                         },
                     },
                     "ha_dev_info": ha_dev_info,
+                    "icon": icon if icon else None,
                 }
 
                 _LOGGER.info("Adding device: %s (%s)", device_name, model_id)

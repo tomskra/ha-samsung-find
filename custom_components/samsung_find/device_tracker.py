@@ -75,9 +75,7 @@ class SamsungDeviceTracker(DeviceTrackerEntity):
         self._attr_device_info = device['ha_dev_info']
         self._attr_latitude = None
         self._attr_longitude = None
-
-        if 'icons' in device['data'] and 'coloredIcon' in device['data']['icons']:
-            self._attr_entity_picture = device['data']['icons']['coloredIcon']
+        self._attr_entity_picture = device['data']['icon'] if 'icon' in device['data'] else None
             
         self.async_update = coordinator.async_add_listener(self.async_write_ha_state)
 
