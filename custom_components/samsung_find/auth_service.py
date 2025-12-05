@@ -95,12 +95,43 @@ class SamsungAuthService:
 
     def generate_device_info(self) -> dict[str, str]:
         android_id = secrets.token_hex(16)
+        
+        # Pool of realistic Android devices to avoid all users appearing as same device
+        devices = [
+            ("Pixel 8 Pro", "Google Pixel 8 Pro", "35"),
+            ("Pixel 8", "Google Pixel 8", "35"),
+            ("Pixel 7 Pro", "Google Pixel 7 Pro", "34"),
+            ("Pixel 7", "Google Pixel 7", "34"),
+            ("Pixel 6 Pro", "Google Pixel 6 Pro", "33"),
+            ("Pixel 6", "Google Pixel 6", "33"),
+            ("Pixel 5", "Google Pixel 5", "33"),
+            ("OnePlus 12", "OnePlus 12", "35"),
+            ("OnePlus 11", "OnePlus 11", "34"),
+            ("OnePlus 10 Pro", "OnePlus 10 Pro", "33"),
+            ("OnePlus 10T", "OnePlus 10T", "33"),
+            ("OnePlus 9 Pro", "OnePlus 9 Pro", "33"),
+            ("2211133G", "Xiaomi 13", "34"),
+            ("2210132G", "Xiaomi 12", "33"),
+            ("MI 11", "Xiaomi Mi 11", "33"),
+            ("23013RK75C", "Xiaomi Redmi Note 12 Pro", "33"),
+            ("22101316G", "Xiaomi Redmi Note 11 Pro", "33"),
+            ("M2101K6G", "Xiaomi Poco F3", "33"),
+            ("motorola edge 40 pro", "Motorola Edge 40 Pro", "34"),
+            ("motorola edge 30 pro", "Motorola Edge 30 Pro", "33"),
+            ("moto g84 5G", "Motorola Moto G84 5G", "34"),
+            ("ASUS_AI2302", "ASUS Zenfone 10", "34"),
+            ("ASUS_AI2205", "ASUS Zenfone 9", "33"),
+            ("2201116PG", "POCO F4", "33"),
+        ]
+        
+        device_model, device_name, os_version = secrets.choice(devices)
+        
         self.device_info = {
             "android_id": android_id,
             "device_info": "Google|com.android.chrome",
-            "device_model": "Pixel 8 Pro",
-            "device_name": "Google Pixel 8 Pro",
-            "device_os_version": "35",
+            "device_model": device_model,
+            "device_name": device_name,
+            "device_os_version": os_version,
             "physical_address": f"ANID:{android_id}",
         }
         return self.device_info
