@@ -181,6 +181,7 @@ async def get_devices(
             for item in data.get("items", []):
                 device_type = item.get("type")
                 device_id = item.get("deviceId")
+                icon: str | None = None
 
                 if device_type == "TAG":
                     # For TAG type, get info from metadata
@@ -200,7 +201,9 @@ async def get_devices(
                     )
                     if device_detail:
                         device_name = device_detail.get("label", device_name)
-                        icon = device_detail.get("icons", "").get("coloredIcon", "")
+                        icons_dict = device_detail.get("icons")
+                        if isinstance(icons_dict, dict):
+                            icon = icons_dict.get("coloredIcon")
 
                 else:
                     model_info = item.get("modelInfo", {})
@@ -244,9 +247,9 @@ async def get_devices(
                             if device_type == "TAG"
                             else "",
                         },
+                        "icon": icon,
                     },
                     "ha_dev_info": ha_dev_info,
-                    "icon": icon if icon else None,
                 }
 
                 _LOGGER.info("Adding device: %s (%s)", device_name, model_id)
