@@ -126,5 +126,5 @@ This is a third-party integration and is not affiliated with or endorsed by Sams
 [buymecoffee]: https://www.buymeacoffee.com/tomskra
 [buymecoffeebadge]: https://img.shields.io/badge/buy%20me%20a-coffee-blue.svg?style=for-the-badge&logo=buymeacoffee&logoColor=ccc
 
-[revolut]: https://revolut.me/tomskra
+[revolut]: https://revolut.me/tomskrasek
 [revolutbadge]: https://img.shields.io/badge/_revolut-me_-blue.svg?style=for-the-badge&logo=revolut&logoColor=ccc
