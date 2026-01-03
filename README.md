@@ -9,7 +9,7 @@ The integration creates three entities for each device:
 
 **Note:** This integration does **not** allow you to perform actions based on button presses on the SmartTag.
 
-[![BuyMeCoffee][buymecoffeebadge]][buymecoffee]
+[![BuyMeCoffee][buymecoffeebadge]][buymecoffee] [![Revolut][revolutbadge]][revolut]
 
 ## ⚠️ Important Warning/Disclaimer ⚠️
 
