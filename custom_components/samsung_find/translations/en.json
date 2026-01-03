@@ -5,7 +5,7 @@
     },
     "step": {
       "user": {
-        "description": "1. Open [this link]({auth_url}) and immediately open Developer Console in browser (F12).\n2. Log in with your Samsung account. After login, you'll see SmartThings page (don't login there, continue below)\n 3. Find the **login.do** request in Network tab\n 4. Copy the **auth_server_url** and **code** from URL query parameter.\nContinue with the button below."
+        "description": "1. Click [this link]({auth_url}) to open the Samsung login page, then open the browser Developer Tools → Network (F12).\n2. Log in with your Samsung account.\n3. In the Network tab, find the redirect request and copy the entire redirect URI (it starts with ms-app://).\n4. Paste the full redirect URI into the field below and continue."
       }
     }
   },

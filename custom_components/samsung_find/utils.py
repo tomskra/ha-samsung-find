@@ -530,6 +530,7 @@ async def get_device_location(
                     break
 
             if not location_op:
+                _LOGGER.warning("[%s] No LOCATION operation found in response. If problem persists, it can happen after some time without login to https://samsungfind.samsung.com/. Go to the website and log in.", dev_name)
                 return res
 
             # Find operation with type CHECK_CONNECTION and parse Battery level

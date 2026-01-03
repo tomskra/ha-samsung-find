@@ -5,7 +5,7 @@
     },
     "step": {
       "user": {
-        "description": "1. Öffnen Sie [diesen Link]({auth_url}) und öffnen Sie sofort die Entwicklerkonsole im Browser (F12).\n2. Melden Sie sich mit Ihrem Samsung-Konto an. Nach der Anmeldung sehen Sie die SmartThings-Seite (melden Sie sich dort nicht an, fahren Sie unten fort)\n 3. Finden Sie die **login.do**-Anfrage im Netzwerk-Tab\n 4. Kopieren Sie **auth_server_url** und **code** aus den URL-Abfrageparametern.\nFahren Sie mit der Schaltfläche unten fort."
+        "description": "1. Klicken Sie auf [diesen Link]({auth_url}), um die Samsung-Anmeldeseite zu öffnen, und öffnen Sie dann die Browser-Entwicklertools → Netzwerk (F12).\n2. Melden Sie sich mit Ihrem Samsung-Konto an.\n3. Finden Sie im Netzwerk-Tab die Weiterleitungsanfrage und kopieren Sie die gesamte Weiterleitungs-URI (sie beginnt mit ms-app://).\n   Beispiel: ms-app://s-1-15-2-4027708247-2189610-1983755848-2937435718-1578786913-2158692839-1974417358?\n4. Fügen Sie die vollständige Weiterleitungs-URI in das Feld unten ein und fahren Sie fort."
       }
     }
   },
