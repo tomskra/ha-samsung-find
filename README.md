@@ -77,7 +77,7 @@ If ringing your tag doesn't work, first try making it ring from the [Samsung Fin
 ## Support
 It’s been a fun challenge, but also a lot of hard work. If this integration has made your smart home a little more useful or convenient, and you’d like to show some support, a coffee is always appreciated. It helps keep the project going and makes the time spent on updates and improvements even more rewarding. ☕
 
-[![BuyMeCoffee][buymecoffeebadge]][buymecoffee]
+[![BuyMeCoffee][buymecoffeebadge]][buymecoffee] [![Revolut][revolutbadge]][revolut]
 
 ---
 
@@ -125,3 +125,6 @@ This is a third-party integration and is not affiliated with or endorsed by Sams
 
 [buymecoffee]: https://www.buymeacoffee.com/tomskra
 [buymecoffeebadge]: https://img.shields.io/badge/buy%20me%20a-coffee-blue.svg?style=for-the-badge&logo=buymeacoffee&logoColor=ccc
+
+[revolut]: https://revolut.me/tomskra
+[revolutbadge]: https://img.shields.io/badge/_revolut-me_-blue.svg?style=for-the-badge&logo=revolut&logoColor=ccc
