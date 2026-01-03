@@ -66,11 +66,13 @@ If ringing your tag doesn't work, first try making it ring from the [Samsung Fin
 
 1. Go to the Integrations page
 2. Search for "Samsung Find"
-3. An authentication URL will be displayed in the form. Click the link (or copy it into your browser). This URL contains an encrypted payload required for Samsung's Android SDK login method.
-4. Log into your Samsung account as usual. After successful login you'll be redirected to a URL starting with `ms-app://...` – your browser will likely show an error because this scheme isn't handled. That's expected.
-5. Copy the FULL redirect URL (everything beginning with `ms-app://` including all query parameters).
-6. Paste this redirect URL into the Home Assistant form field and submit. The integration will decrypt the response locally, obtain the necessary user and API tokens, and finish setup.
+3. An authentication URL will be displayed. Click the link to open the Samsung login page, then open the browser Developer Tools → Network (F12).
+4. Log in with your Samsung account.
+5. In the Network tab, find the redirect request and copy the entire redirect URI (it starts with `ms-app://`).
+6. Paste the full redirect URI into the Home Assistant form field and submit. The integration will decrypt the response locally, obtain the necessary user and API tokens, and finish setup.
 7. Wait a few seconds for the integration to load your devices.
+
+![Setup Instructions](instructions.png)
 
 ## Support
 It’s been a fun challenge, but also a lot of hard work. If this integration has made your smart home a little more useful or convenient, and you’d like to show some support, a coffee is always appreciated. It helps keep the project going and makes the time spent on updates and improvements even more rewarding. ☕
@@ -111,7 +113,6 @@ For support, please create an issue on the GitHub repository.
 ## Known issues
 
 - Integration logo is missing (pending completion of the home-assistant/brands PR).
-- Devices currently lack individual logos.
 
 ## Roadmap
 
