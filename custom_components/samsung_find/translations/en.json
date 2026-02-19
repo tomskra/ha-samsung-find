@@ -13,7 +13,8 @@
     "step": {
       "init": {
         "data": {
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (seconds)",
+          "ignore_mobile_devices": "Ignore mobile devices (phones, tablets, watches, buds)"
         }
       }
     }

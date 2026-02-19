@@ -13,7 +13,8 @@
     "step": {
       "init": {
         "data": {
-          "update_interval": "Interval aktualizace (sekundy)"
+          "update_interval": "Interval aktualizace (sekundy)",
+          "ignore_mobile_devices": "Ignorovat mobilní zařízení (telefony, tablety, hodinky, sluchátka)"
         }
       }
     }
