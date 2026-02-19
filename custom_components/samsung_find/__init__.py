@@ -20,12 +20,15 @@ from .const import (
     CONF_CLIENT_ID,
     CONF_COUNTRY_CODE,
     CONF_HEADERS,
+    CONF_IGNORE_MOBILE_DEVICES,
+    CONF_IGNORE_MOBILE_DEVICES_DEFAULT,
     CONF_REFRESH_TOKEN,
     CONF_UPDATE_INTERVAL,
     CONF_UPDATE_INTERVAL_DEFAULT,
     CONF_USER_ID,
     CONF_USERAUTH_TOKEN,
     DOMAIN,
+    MOBILE_DEVICE_TYPES,
 )
 from .utils import get_device_location, get_devices, get_tag_location, renew_tokens
 
@@ -153,8 +156,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Load all Samsung-Find devices from the users account
     devices = await get_devices(hass, session, entry.entry_id)
-
     _LOGGER.info("Found %d devices", len(devices))
+
+    # Filter out mobile devices if option is enabled
+    if entry.options.get(CONF_IGNORE_MOBILE_DEVICES, CONF_IGNORE_MOBILE_DEVICES_DEFAULT):
+        original_count = len(devices)
+        devices = [
+            device for device in devices
+            if device['data'].get('deviceTypeCode') not in MOBILE_DEVICE_TYPES
+        ]
+        if (filtered_count := original_count - len(devices)) > 0:
+            _LOGGER.info(
+                "Filtered out %d mobile device(s). %d devices remaining",
+                filtered_count,
+                len(devices)
+            )
 
     # Create an update coordinator. This is responsible to regularly
     # fetch data from Samsung Find API and update the device_tracker

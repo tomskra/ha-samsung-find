@@ -18,11 +18,15 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlowWithConfigEntry,
 )
+from homeassistant.const import Platform
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CLIENT_ID,
+    CONF_IGNORE_MOBILE_DEVICES,
+    CONF_IGNORE_MOBILE_DEVICES_DEFAULT,
     CONF_REFRESH_TOKEN,
     CONF_UPDATE_INTERVAL,
     CONF_UPDATE_INTERVAL_DEFAULT,
@@ -30,6 +34,7 @@ from .const import (
     DOMAIN,
     CONF_OAUTH2_TOKEN_URL,
     CONF_USERAUTH_TOKEN,
+    MOBILE_DEVICE_TYPES,
 )
 from .auth_service import SamsungAuthService
 
@@ -194,13 +199,12 @@ class SamsungFindOptionsFlowHandler(OptionsFlowWithConfigEntry):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle options flow."""
-
         if user_input is not None:
-            res = self.async_create_entry(title="", data=user_input)
-
-            # Reload the integration entry to make sure the newly set options take effect
+            await self._handle_ignore_mobile_change(user_input)
+            
+            # Reload the integration to apply changes
             self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
-            return res
+            return self.async_create_entry(title="", data=user_input)
 
         data_schema = vol.Schema(
             {
@@ -210,6 +214,57 @@ class SamsungFindOptionsFlowHandler(OptionsFlowWithConfigEntry):
                         CONF_UPDATE_INTERVAL, CONF_UPDATE_INTERVAL_DEFAULT
                     ),
                 ): vol.All(vol.Coerce(int), vol.Clamp(min=30)),
+                vol.Optional(
+                    CONF_IGNORE_MOBILE_DEVICES,
+                    default=self.options.get(
+                        CONF_IGNORE_MOBILE_DEVICES, CONF_IGNORE_MOBILE_DEVICES_DEFAULT
+                    ),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=data_schema)
+
+    async def _handle_ignore_mobile_change(self, user_input: dict[str, Any]) -> None:
+        """Remove mobile device entities when ignore option is enabled."""
+        old_ignore = self.options.get(
+            CONF_IGNORE_MOBILE_DEVICES, CONF_IGNORE_MOBILE_DEVICES_DEFAULT
+        )
+        new_ignore = user_input.get(
+            CONF_IGNORE_MOBILE_DEVICES, CONF_IGNORE_MOBILE_DEVICES_DEFAULT
+        )
+        
+        # Only process if setting changed and we're now ignoring mobile devices
+        if new_ignore == old_ignore or not new_ignore:
+            return
+            
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
+        devices = entry_data.get("devices", [])
+        if not devices:
+            return
+        
+        # Collect mobile device IDs
+        mobile_device_ids = [
+            device['data']['dvceID']
+            for device in devices
+            if device['data'].get('deviceTypeCode') in MOBILE_DEVICE_TYPES
+        ]
+        
+        if not mobile_device_ids:
+            return
+        
+        entity_registry = er.async_get(self.hass)
+        device_registry = dr.async_get(self.hass)
+        
+        # Remove entities belonging to mobile devices
+        entities = er.async_entries_for_config_entry(
+            entity_registry, self.config_entry.entry_id
+        )
+        for entity in entities:
+            if any(device_id in entity.unique_id for device_id in mobile_device_ids):
+                entity_registry.async_remove(entity.entity_id)
+        
+        # Remove device entries
+        for device_id in mobile_device_ids:
+            device_entry = device_registry.async_get_device(identifiers={(DOMAIN, device_id)})
+            if device_entry:
+                device_registry.async_remove_device(device_entry.id)
