@@ -133,6 +133,7 @@ async def get_devices(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
     entry_id: str,
+    include_disabled: bool = False,
 ) -> list[dict[str, Any]]:
     """Get devices from Samsung Find API.
 
@@ -140,6 +141,7 @@ async def get_devices(
         hass: Home Assistant instance
         session: Session with valid OAuth2 token
         entry_id: Config entry ID
+        include_disabled: Include HA-disabled devices for ignored-device cleanup.
 
     Returns:
         List of formatted device dictionaries
@@ -218,7 +220,7 @@ async def get_devices(
                 identifier = (DOMAIN, device_id)
                 ha_dev = device_registry.async_get(hass).async_get_device({identifier})
 
-                if ha_dev and ha_dev.disabled:
+                if ha_dev and ha_dev.disabled and not include_disabled:
                     _LOGGER.debug(
                         "Ignoring disabled device: '%s' (disabled by %s)",
                         device_name, ha_dev.disabled_by
