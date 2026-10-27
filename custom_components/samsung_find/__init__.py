@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -158,8 +159,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     devices = await get_devices(hass, session, entry.entry_id)
     _LOGGER.info("Found %d devices", len(devices))
 
+    ignore_mobile_devices = entry.options.get(
+        CONF_IGNORE_MOBILE_DEVICES, CONF_IGNORE_MOBILE_DEVICES_DEFAULT
+    )
+    if ignore_mobile_devices:
+        # Clear entities left by versions that exposed mobile devices.
+        _remove_ignored_mobile_devices(hass, entry, devices)
+
     # Filter out mobile devices if option is enabled
-    if entry.options.get(CONF_IGNORE_MOBILE_DEVICES, CONF_IGNORE_MOBILE_DEVICES_DEFAULT):
+    if ignore_mobile_devices:
         original_count = len(devices)
         devices = [
             device for device in devices
@@ -191,6 +199,43 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     )
     return True
+
+
+def _remove_ignored_mobile_devices(
+    hass: HomeAssistant, entry: ConfigEntry, devices: list[dict[str, Any]]
+) -> None:
+    """Remove previously created mobile entities when they are ignored."""
+    mobile_device_ids = {
+        device["data"]["dvceID"]
+        for device in devices
+        if device["data"].get("deviceTypeCode") in MOBILE_DEVICE_TYPES
+    }
+    if not mobile_device_ids:
+        return
+
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+    mobile_devices = [
+        device_entry
+        for device_id in mobile_device_ids
+        if (device_entry := device_registry.async_get_device({(DOMAIN, device_id)}))
+    ]
+    mobile_registry_ids = {device_entry.id for device_entry in mobile_devices}
+
+    for entity_entry in er.async_entries_for_config_entry(
+        entity_registry, entry.entry_id
+    ):
+        if entity_entry.device_id in mobile_registry_ids:
+            entity_registry.async_remove(entity_entry.entity_id)
+
+    for device_entry in mobile_devices:
+        device_registry.async_remove_device(device_entry.id)
+
+    if mobile_devices:
+        _LOGGER.info(
+            "Removed %d ignored mobile device(s) from Home Assistant",
+            len(mobile_devices),
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
